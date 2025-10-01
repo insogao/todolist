@@ -1,7 +1,7 @@
 import ELK from 'elkjs/lib/elk.bundled.js';
 import type { GraphData, GraphNode, GraphEdge, Direction } from '@/lib/utils/types';
 
-const DEFAULT_RECT = { width: 180, height: 60 };
+const DEFAULT_RECT = { width: 220, height: 80 };
 const DEFAULT_CIRCLE = { width: 96, height: 96 };
 
 function elkDirection(dir: Direction) {
@@ -12,7 +12,7 @@ function elkDirection(dir: Direction) {
 const elk = new ELK();
 
 /**
- * 增量布局：对已有节点传入 x/y 并固定，避免整体大幅移动
+ * 使用 ELK 进行树形布局，避免连线与节点重叠
  */
 export async function layoutWithElk(
   graph: GraphData,
@@ -28,14 +28,12 @@ export async function layoutWithElk(
       height: n.height ?? size.height,
     } as any;
 
-    if (prev) {
-      // 传入旧坐标并固定
+    // 如果有前一帧坐标，传入但不固定（允许优化）
+    if (prev && prevPositions && prevPositions.size > 0) {
       base.x = prev.x;
       base.y = prev.y;
-      base.layoutOptions = {
-        'org.eclipse.elk.fixed': 'true',
-      };
     }
+
     return base;
   });
 
@@ -50,12 +48,22 @@ export async function layoutWithElk(
     layoutOptions: {
       'elk.algorithm': 'layered',
       'elk.direction': elkDirection(graph.direction),
-      'elk.layered.spacing.nodeNodeBetweenLayers': '48',
-      'elk.spacing.nodeNode': '32',
-      'elk.edgeRouting': 'POLYLINE',
-      'elk.layered.nodePlacement.strategy': 'BRANDES_KOEPF',
-      // 尽量尊重输入顺序，辅助减小扰动
-      'elk.considerModelOrder': 'true',
+      // 增加节点间距以避免重叠
+      'elk.spacing.nodeNode': '80',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '120',
+      'elk.layered.spacing.edgeNodeBetweenLayers': '60',
+      // 使用正交路由避免边与节点重叠
+      'elk.edgeRouting': 'ORTHOGONAL',
+      // 节点放置策略
+      'elk.layered.nodePlacement.strategy': 'NETWORK_SIMPLEX',
+      // 交叉最小化
+      'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
+      // 尊重输入顺序
+      'elk.considerModelOrder': 'NODES_AND_EDGES',
+      // 紧凑布局
+      'elk.layered.compaction.postCompaction.strategy': 'EDGE_LENGTH',
+      // 层分配策略
+      'elk.layered.layering.strategy': 'NETWORK_SIMPLEX',
     },
     children,
     edges,

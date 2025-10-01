@@ -1,89 +1,418 @@
-/* 全局样式与主题变量（React Flow 样式已在 main.tsx 本地引入） */
+/* 全局样式与主题变量 - 秘塔搜索风格 */
 :root {
-  --bg: #0b1020;
-  --panel: #131a2a;
-  --card: #161f33;
-  --card-border: #22304d;
-  --fg: #e6edf7;
-  --muted: #9fb0ca;
-  --brand: #6ea8fe;
+  /* 秘塔风格配色：蓝色主题 + 极简设计 */
+  --bg: #f8fafc;
+  --bg-secondary: #f1f5f9;
+  --panel: #ffffff;
+  --card: #ffffff;
+  --card-border: #e2e8f0;
+  --card-hover: #f8fafc;
+  --fg: #1e293b;
+  --fg-secondary: #475569;
+  --muted: #64748b;
+  --brand: #175CD3;
+  --brand-light: #3b82f6;
+  --brand-lighter: #dbeafe;
   --accent: #8b5cf6;
-  --success: #22c55e;
+  --success: #10b981;
   --warning: #f59e0b;
   --danger: #ef4444;
+
+  /* 阴影系统 */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+  /* 渐变 */
+  --gradient-brand: linear-gradient(135deg, #175CD3 0%, #3b82f6 100%);
+  --gradient-success: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+  --gradient-bg: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+/* 深色模式（可选） */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f172a;
+    --bg-secondary: #1e293b;
+    --panel: #1e293b;
+    --card: #1e293b;
+    --card-border: #334155;
+    --card-hover: #2d3a4f;
+    --fg: #f1f5f9;
+    --fg-secondary: #cbd5e1;
+    --muted: #94a3b8;
+    --brand: #3b82f6;
+    --brand-light: #60a5fa;
+    --brand-lighter: #1e3a8a;
+    --gradient-bg: linear-gradient(180deg, #0f172a 0%, #1e293b 100%);
+  }
 }
 
 * { box-sizing: border-box; }
-html, body, #root { height: 100%; }
+html, body, #root { height: 100%; margin: 0; }
 body {
   margin: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-  background: linear-gradient(180deg, #0b1020 0%, #0b1328 100%);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background: var(--gradient-bg);
   color: var(--fg);
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* 网格背景更柔和 */
+/* React Flow 背景网格 */
 .react-flow__background {
-  opacity: 0.45;
+  opacity: 0.3;
 }
 
-/* 缩放控件与迷你地图样式微调 */
+/* React Flow 控件 */
 .react-flow__controls {
   background: var(--panel);
   border: 1px solid var(--card-border);
-  box-shadow: 0 6px 16px rgba(0,0,0,0.45);
-}
-.react-flow__minimap {
-  background: rgba(19,26,42,0.9);
-  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
 }
 
-/* 卡片节点基础样式（配合自定义节点） */
+.react-flow__controls-button {
+  background: var(--panel);
+  border: none;
+  border-bottom: 1px solid var(--card-border);
+  color: var(--fg);
+  transition: all 0.2s ease;
+}
+
+.react-flow__controls-button:hover {
+  background: var(--card-hover);
+  color: var(--brand);
+}
+
+/* 迷你地图 */
+.react-flow__minimap {
+  background: var(--panel);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+/* 节点卡片样式 - 秘塔风格 */
 .node-card {
   background: var(--card);
   border: 1px solid var(--card-border);
-  border-radius: 10px;
+  border-radius: 12px;
   color: var(--fg);
-  padding: 10px 12px;
-  min-width: 160px;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  padding: 16px;
+  min-width: 200px;
+  box-shadow: var(--shadow-md);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+  overflow: hidden;
 }
+
+.node-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: var(--gradient-brand);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.node-card:hover {
+  box-shadow: var(--shadow-lg);
+  transform: translateY(-2px);
+  border-color: var(--brand-lighter);
+}
+
+.node-card:hover::before {
+  opacity: 1;
+}
+
+.node-card .content-wrapper {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.node-card .status-indicator {
+  width: 4px;
+  border-radius: 2px;
+  height: 100%;
+  min-height: 40px;
+  background: var(--gradient-brand);
+  flex-shrink: 0;
+}
+
+.node-card .content {
+  flex: 1;
+  min-width: 0;
+}
+
 .node-card .title {
   font-weight: 600;
-  font-size: 13.5px;
-  line-height: 1.3;
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--fg);
+  margin-bottom: 8px;
+  word-wrap: break-word;
 }
+
 .node-card .meta {
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--muted);
   display: flex;
   gap: 8px;
   align-items: center;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted);
 }
-.node-card .pill {
-  display: inline-block;
-  border-radius: 999px;
-  padding: 2px 8px;
+
+.node-card .badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 6px;
+  padding: 3px 10px;
   font-size: 11px;
+  font-weight: 500;
   border: 1px solid var(--card-border);
-  background: rgba(255,255,255,0.04);
+  background: var(--bg-secondary);
+  color: var(--fg-secondary);
+  transition: all 0.2s ease;
 }
-.node-card .bar {
-  width: 3px;
-  border-radius: 2px;
-  height: 100%;
+
+.node-card .badge.milestone {
+  background: var(--brand-lighter);
+  border-color: var(--brand);
+  color: var(--brand);
+}
+
+.node-card .badge.task {
+  background: var(--bg-secondary);
+  border-color: var(--card-border);
+  color: var(--fg-secondary);
+}
+
+.node-card .node-id {
+  opacity: 0.7;
+  font-size: 11px;
+  font-family: 'Monaco', 'Menlo', monospace;
+}
+
+/* 加载动画 - shimmer 效果 */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.node-card.loading {
+  background: linear-gradient(
+    90deg,
+    var(--card) 0%,
+    var(--card-hover) 50%,
+    var(--card) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+/* React Flow Handle 样式 */
+.react-flow__handle {
+  width: 10px;
+  height: 10px;
+  background: var(--brand);
+  border: 2px solid var(--panel);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.react-flow__handle:hover {
+  width: 12px;
+  height: 12px;
+  background: var(--brand-light);
+}
+
+/* React Flow 边样式 */
+.react-flow__edge-path {
+  stroke-width: 2px;
+  transition: stroke-width 0.2s ease, stroke 0.2s ease;
+}
+
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke-width: 3px;
+}
+
+.react-flow__edge {
+  z-index: 1;
+}
+
+.react-flow__edge.selected,
+.react-flow__edge:hover {
+  z-index: 1000 !important;
+}
+
+.react-flow__edge.edge--depends .react-flow__edge-path {
+  stroke: var(--brand-light);
+  stroke-dasharray: 8 4;
+  opacity: 0.7;
+}
+
+.react-flow__edge.edge--default .react-flow__edge-path {
+  stroke: var(--brand);
+}
+
+.react-flow__edge-textbg {
+  fill: var(--panel);
+  stroke: var(--card-border);
+  stroke-width: 1px;
+}
+
+.react-flow__edge-text {
+  fill: var(--fg-secondary);
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* 进度指示器样式 - 秘塔风格 */
+.progress-indicator {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--panel);
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  padding: 20px 24px;
+  box-shadow: var(--shadow-xl);
+  z-index: 1000;
+  min-width: 400px;
+  max-width: 600px;
+}
+
+.progress-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.progress-step {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 12px 0;
+}
+
+.step-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+  position: relative;
+}
+
+.progress-step.pending .step-icon {
+  background: var(--bg-secondary);
+  border: 2px solid var(--card-border);
+}
+
+.progress-step.active .step-icon {
+  background: var(--brand-lighter);
+  border: 2px solid var(--brand);
+}
+
+.progress-step.completed .step-icon {
+  background: var(--brand);
+  border: 2px solid var(--brand);
+  color: white;
+}
+
+.step-icon .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.progress-step.active .step-icon .dot {
   background: var(--brand);
 }
 
-/* 边样式微调 */
-.react-flow__edge-path {
-  stroke-width: 2px;
+/* Spinner 动画 */
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
-.edge--depends {
-  stroke-dasharray: 6 6;
-  stroke: #8aa6ff;
+
+.step-icon .spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--card-border);
+  border-top-color: var(--brand);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
 }
-.edge--default {
-  stroke: #5c86ff;
+
+.step-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.step-label {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--fg);
+  line-height: 1.5;
+  transition: color 0.3s ease;
+}
+
+.progress-step.pending .step-label {
+  color: var(--muted);
+}
+
+.progress-step.active .step-label {
+  color: var(--brand);
+}
+
+.step-message {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--fg-secondary);
+  line-height: 1.4;
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.progress-connector {
+  width: 2px;
+  height: 16px;
+  background: var(--card-border);
+  margin-left: 15px;
+  transition: background 0.3s ease;
+}
+
+.progress-connector.completed {
+  background: var(--brand);
 }

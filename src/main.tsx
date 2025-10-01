@@ -5,8 +5,4 @@ import App from './App';
 import './styles/global.css';
 
 const container = document.getElementById('root')!;
-createRoot(container).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+createRoot(container).render(<App />);

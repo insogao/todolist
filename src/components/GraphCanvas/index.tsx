@@ -143,6 +143,13 @@ export function GraphCanvas() {
         fitView
         minZoom={0.1}
         maxZoom={2}
+        nodesDraggable={true}
+        nodesConnectable={false}
+        elementsSelectable={true}
+        defaultEdgeOptions={{
+          animated: false,
+          style: { strokeWidth: 2 }
+        }}
       >
         <Background variant="dots" gap={16} size={1} color="var(--card-border)" />
         <MiniMap

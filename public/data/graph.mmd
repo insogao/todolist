@@ -1,38 +1,55 @@
 graph LR
-research_goal[深度学习研究项目]
-problem_analysis[问题分析]
-data_preprocessing[数据预处理]
-data_cleaning[数据清洗]
-feature_extraction[特征提取]
-data_augmentation[数据增强]
-model_selection[模型选择]
-cnn_model[CNN 架构]
-transformer[Transformer 模型]
-implementation[实现阶段]
-training[模型训练]
-hyperparameter[超参数调优]
-validation[验证与测试]
-optimization[性能优化]
-speed_opt[推理速度优化]
-accuracy_opt[准确率提升]
-evaluation((评估与分析))
-metrics[性能指标评估]
-comparison[对比分析]
-research_goal --> problem_analysis
-problem_analysis --> data_preprocessing
-data_preprocessing --> data_cleaning
-data_preprocessing --> feature_extraction
-data_preprocessing --> data_augmentation
-problem_analysis --> model_selection
-model_selection --> cnn_model
-model_selection --> transformer
-research_goal --> implementation
-implementation --> training
-training --> hyperparameter
-training --> validation
-implementation --> optimization
-optimization --> speed_opt
-optimization --> accuracy_opt
-research_goal --> evaluation
-evaluation --> metrics
-evaluation --> comparison
+problem((核心问题：如何提升推荐系统准确率))
+approach_1[方向A：协同过滤优化]
+approach_2[方向B：深度学习模型]
+approach_3[方向C：混合推荐]
+approach_4[方向D：冷启动解决]
+cf_user[基于用户的CF]
+cf_item[基于物品的CF]
+cf_matrix[矩阵分解]
+dl_cnn[CNN特征提取]
+dl_rnn[RNN序列建模]
+dl_transformer[Transformer架构]
+hybrid_linear[线性加权融合]
+hybrid_stacking[Stacking集成]
+cold_content[基于内容的推荐]
+cold_popularity[流行度推荐]
+result_cf_fail[❌ CF效果不佳]
+result_cnn_fail[❌ CNN特征不足]
+result_rnn_ok[✓ RNN效果尚可]
+result_transformer_good[✓ Transformer效果优秀]
+result_stacking_good[✓ Stacking表现良好]
+result_content_ok[✓ 内容推荐可用]
+insight_1[洞察：序列建模是关键]
+insight_2[洞察：多模型融合有效]
+conclusion((✓ 最终方案：Transformer+Stacking混合推荐))
+problem --> approach_1
+problem --> approach_2
+problem --> approach_3
+problem --> approach_4
+approach_1 --> cf_user
+approach_1 --> cf_item
+approach_1 --> cf_matrix
+approach_2 --> dl_cnn
+approach_2 --> dl_rnn
+approach_2 --> dl_transformer
+approach_3 --> hybrid_linear
+approach_3 --> hybrid_stacking
+approach_4 --> cold_content
+approach_4 --> cold_popularity
+cf_user --> result_cf_fail
+cf_item --> result_cf_fail
+cf_matrix --> result_cf_fail
+dl_cnn --> result_cnn_fail
+dl_rnn --> result_rnn_ok
+dl_transformer --> result_transformer_good
+hybrid_linear --> result_stacking_good
+hybrid_stacking --> result_stacking_good
+cold_content --> result_content_ok
+result_rnn_ok --> insight_1
+result_transformer_good --> insight_1
+result_stacking_good --> insight_2
+result_content_ok --> insight_2
+insight_1 --> conclusion
+insight_2 --> conclusion
+result_transformer_good --> conclusion

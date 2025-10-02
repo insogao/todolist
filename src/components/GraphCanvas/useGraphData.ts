@@ -270,6 +270,37 @@ export function useGraphData() {
 
           if (!alive) return;
 
+          // 计算每个节点的入边和出边数量，并为每条边分配handle索引
+          const incomingEdgeCount = new Map<string, number>();
+          const outgoingEdgeCount = new Map<string, number>();
+          const incomingEdgesList = new Map<string, string[]>();
+          const outgoingEdgesList = new Map<string, string[]>();
+          const targetHandleMap = new Map<string, number>(); // edgeId -> handleIndex
+          const sourceHandleMap = new Map<string, number>(); // edgeId -> handleIndex
+
+          // 第一遍：收集所有边信息
+          laidEdges.forEach((e) => {
+            // 统计入边
+            if (!incomingEdgesList.has(e.target)) incomingEdgesList.set(e.target, []);
+            incomingEdgesList.get(e.target)!.push(e.id);
+
+            // 统计出边
+            if (!outgoingEdgesList.has(e.source)) outgoingEdgesList.set(e.source, []);
+            outgoingEdgesList.get(e.source)!.push(e.id);
+          });
+
+          // 第二遍：为每条边分配handle索引
+          laidEdges.forEach((e) => {
+            const targetEdges = incomingEdgesList.get(e.target) || [];
+            const sourceEdges = outgoingEdgesList.get(e.source) || [];
+
+            targetHandleMap.set(e.id, targetEdges.indexOf(e.id));
+            sourceHandleMap.set(e.id, sourceEdges.indexOf(e.id));
+
+            incomingEdgeCount.set(e.target, targetEdges.length);
+            outgoingEdgeCount.set(e.source, sourceEdges.length);
+          });
+
           // 转为 React Flow 节点/边
           const rfNodes: Node[] = laidNodes.map((n) => ({
             id: n.id,
@@ -277,19 +308,35 @@ export function useGraphData() {
             position: { x: n.x ?? 0, y: n.y ?? 0 },
             width: n.width ?? (n.type === 'circle' ? 96 : 220),
             height: n.height ?? (n.type === 'circle' ? 96 : 80),
-            data: { label: n.title, type: n.type, raw: n, direction: graph.direction },
+            data: {
+              label: n.title,
+              type: n.type,
+              raw: {
+                ...n,
+                incomingEdges: incomingEdgesList.get(n.id) || [],
+                outgoingEdges: outgoingEdgesList.get(n.id) || [],
+              },
+              direction: graph.direction
+            },
           }));
 
-          const rfEdges: Edge[] = laidEdges.map((e) => ({
-            id: e.id,
-            source: e.source,
-            target: e.target,
-            label: e.label,
-            type: 'default', // 默认贝塞尔曲线，配合正确的 handle 位置
-            animated: false,
-            style: { stroke: 'var(--brand)', strokeWidth: 2 },
-            className: e.label === 'depends_on' ? 'edge--depends' : 'edge--default',
-          }));
+          const rfEdges: Edge[] = laidEdges.map((e) => {
+            const sourceHandleId = `source-${sourceHandleMap.get(e.id) || 0}`;
+            const targetHandleId = `target-${targetHandleMap.get(e.id) || 0}`;
+
+            return {
+              id: e.id,
+              source: e.source,
+              target: e.target,
+              sourceHandle: sourceHandleId,
+              targetHandle: targetHandleId,
+              label: e.label,
+              type: 'default',
+              animated: false,
+              style: { stroke: 'var(--brand)', strokeWidth: 2 },
+              className: e.label === 'depends_on' ? 'edge--depends' : 'edge--default',
+            };
+          });
 
           setNodes(rfNodes);
           setEdges(rfEdges);

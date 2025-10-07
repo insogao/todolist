@@ -62,17 +62,16 @@
   - 读取 plan_test.json
       - 获取 check_list.latest_id、check_list.latest_batch、check_list.refs
   - 构建 LLM 输入
-      - 解析 refs（大小写/空格不敏感；支持 summary 与 info[llm|search|all]）
-      - 将每个引用解析为具体值：
-          - summary → 上游节点的 summary
-          - info[llm] → 从 info 中提取 <info type="llm">…</info>
-          - info[search] → 从 info 中提取 <info type="search">…</info>
-          - 未指定过滤 → 取整段 info（容错：缺失时返回空字符串）
-      - 拼接为多段文本，作为用户输入传给 LLM
-      - 日志打印（stderr）：[planning] built input:\n…
+      - 始终在最顶部拼接“用户问题: <start.title>”（不暴露节点 id/名称）。
+      - 解析 refs（大小写/空格不敏感；支持 summary 与 info[llm|search|all]）。
+      - 对解析值应用“log-level 回退”以增强鲁棒性：
+          - summary 为空 → 回退到 title；
+          - info[llm|search|all] 为空 → 先回退到 summary，再回退到 title。
+      - 拼接为多段文本，作为用户输入传给 LLM。
+      - 日志打印（stderr）：[planning] USER_INPUT ->\n…（PLANNING_LOG_FULL=1 关闭截断；默认不打印系统提示词，除非设置 PLANNING_LOG_SHOW_INSTR=1）。
   - 调用 LLM（结构化输出）
-      - 使用 Agents SDK + zod 校验模型输出结构（{ is_final, tasks[], next_check_list[] }）
-      - 日志打印（stderr）：[planning] model output (parsed):\n…
+      - 使用 Agents SDK + zod 校验模型输出结构（{ is_final, tasks[], next_check_list[] }）。
+      - 日志打印（stderr）：[planning] MODEL_OUTPUT (parsed) ->\n…
   - 回写 plan_test.json
       - 按规则分配 node_id 与 batch，创建新任务节点（status="planned", summary="", info=""）
       - 解析 next_check_list 中的 NEW1..NEW3 → 实际 node_id
@@ -86,7 +85,8 @@
   - 规划下一批
       - npm run plan
   - 注意
-      - 读取与写回均使用 plan_test.json
+      - 默认读取与写回 plan_test.json；也可通过 CLI 传入 .json 或设置 `PLAN_PATH`/`PLAN_FILE` 覆盖目标文件。
+      - 首次仅有 start 节点且 refs 为空时，会自动向 refs 注入 `<startId>:info` 作为引导。
       - 会联网调用大模型；需保证 agent.config.json 的 baseURL、model、apiKey 可用
 
   错误与容错
@@ -127,3 +127,29 @@
           - `fixtures/plan_stage2.json`：已有若干 search→验证继续 search 还是转 summary 的决策。
           - `fixtures/plan_stage3.json`：信息较完善→验证进入最终总结（is_final）与总结任务规划。
       - NPM 脚本快捷方式：`npm run plan:test1`、`npm run plan:test2`、`npm run plan:test3`（均在拷贝上运行）。
+
+  - next_check_list 策略（重要强化）
+      - 谨慎剔除：仅在“当前已知节点的信息明显没有参考价值”，或“后续智能体将提供的信息已充分覆盖该节点内容”时，才从 next_check_list 中移除该节点引用；默认保留核心 summary 引用，避免过早放弃信息基线。
+      - 新旧平衡：当新增搜索方向尚未产出结果时，务必保留关键既有节点的引用。
+      - 终局判断：若本轮仅产出总结类任务（无新的 search），则设 `is_final=true` 并生成唯一总结任务（如 `b:summary, c:summary`）。
+
+  - 搜索生成原则（重要）
+      - 默认不新增 search 仅为“补细节/核对准确性”。应首先相信现有搜索节点的专业性，优先通过 summary 聚合整合与标注不确定性。
+      - 仅当“上一轮搜索带来全新的且重要的调查方向”，且该方向无法由现有节点总结充分覆盖时，才新增下一轮 search（通常 1–2 个）。
+
+  - 始终包含用户原始问题
+      - 规划输入始终在最顶部拼接“用户问题: <start.title>”，不暴露节点 id/名称，确保探索围绕用户目标收敛。
+
+  - 日志与可观测性
+      - 规划日志仅打印 USER_INPUT（默认不打印系统提示词）；设置 `PLANNING_LOG_SHOW_INSTR=1` 可显式打印系统提示；`PLANNING_LOG_FULL=1` 关闭截断。
+      - 统一打印：`[planning] plan file: …`、`[planning] USER_INPUT -> …`、`[planning] MODEL_OUTPUT (parsed) -> …`。
+
+  - 全流程编排脚本（从新 query 到最终 batch=-1）
+      - 新增 `scripts/run-workflow.js`：
+          - 初始化：`--query "..."` 新建包含 start 节点的 plan；或用 `--plan <path.json>` 继续已有流程。
+          - 循环：规划 → 执行（search/summary 子 agent）→ 写回（summary 放节点 `summary`，其余 `<info>` 拼接至节点 `info`）→ 直至 `latest_batch == -1`。
+          - 重试：对子 agent 执行加 429/超时指数退避重试（2s→4s→8s，默认 3 次）。
+          - 并行：支持并行执行本轮 task，默认最大并发 3；结果按规划顺序顺序写回，避免并发写文件。
+      - 运行：
+          - `npm run workflow -- --query "你的问题" --out runs/plan_xxx.json`
+          - 环境变量：`WORKFLOW_MAX_ROUNDS`（默认 8），`WORKFLOW_CONCURRENCY`（默认 3）

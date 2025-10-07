@@ -132,11 +132,25 @@ function instructions() {
 - p_node：父节点引用；大小写/空格不敏感；格式：id:summary 或 id:info[llm|search|all]；多源用英文逗号分隔，如 "b:summary, c:summary"。
 - next_check_list：允许引用既有节点（如 "a:summary"、"c:info[llm]"）与本轮新任务，占位符 NEW1/NEW2/NEW3 对应 tasks[0..2]，如 "NEW1:summary"。
 
-规划策略：
-- 首先判断现有信息覆盖是否充足；若已足够产出最终结论，则设 is_final=true，并创建 1 个 "summary" 任务汇总关键上游（如 "b:summary, c:summary"）。
-- 若存在明显信息缺口或需交叉验证：优先生成 1–2 个有针对性的 "search" 任务（量化口径、来源核验、矛盾点澄清等）。
-- 避免与历史节点重复；每轮任务应实质推进到可总结状态。
-- 当没有有意义的新任务时，允许 tasks 为空，并维持 is_final=false。
+ 规划策略：
+ - 首先判断现有信息覆盖是否充足；若已足够产出最终结论，则设 is_final=true，并创建 1 个 "summary" 任务汇总关键上游（如 "b:summary, c:summary"）。
+ - 若存在明显信息缺口或需交叉验证：优先生成 1–2 个有针对性的 "search" 任务（量化口径、来源核验、矛盾点澄清等）。
+ - 避免与历史节点重复；每轮任务应实质推进到可总结状态。
+ - 当没有有意义的新任务时，允许 tasks 为空，并维持 is_final=false。
+
+搜索生成原则（重要）：
+- 默认不新增 search 仅为“补细节/核对准确性”。应首先相信现有搜索节点的专业性，优先通过 summary 聚合来整合并标注不确定性。
+- 只有当“上一轮搜索带来了全新的且重要的调查方向”，且该方向无法由现有节点的总结充分覆盖时，才新增下一轮 search；数量控制在 1–2 个，避免横向重复。
+- 在新增 search 尚未产出结果之前，务必保留关键既有节点的引用（见 next_check_list 策略），不要过早放弃原始信息基线。
+
+next_check_list 策略（重要）：
+- 谨慎剔除：仅在“当前已知节点的信息明显没有参考价值”，或“后续智能体将提供的信息已充分覆盖该节点内容”时，才考虑从 next_check_list 中移除该节点引用。
+- 保守保留：如果不确定新的检索方向能带回更有价值的信息，应保留原有节点引用，避免过早放弃已有信息来源。
+- 新旧平衡：当新增搜索方向尚未产出结果时，务必保留关键的既有节点（如核心 summary）的引用，以确保下一轮仍能基于可靠基线继续规划。
+
+终局判断（重要）：
+- 若本轮主要产出的是对多节点的“汇总/收束”任务，且没有新的搜索方向（没有 "search" 类型任务），则将 is_final 设为 true，产出唯一的最终总结任务（引用关键上游，如 "b:summary, c:summary"）。
+- 最终总结的 next_check_list 通常只需保留 NEW1:summary（即最终总结本身），除非业务需要继续跟踪其他特定节点。
 
 单一示例（仅示意，不要在输出中包含此示例）：
 {
@@ -174,6 +188,10 @@ export async function planNext() {
     console.error('[planning] bootstrap refs check failed (non-fatal):', e?.message || e);
   }
   const inputs = collectInputs(plan);
+  // Always include the user's original question (start node title) at the top of the prompt,
+  // without exposing node id/name. This keeps exploration anchored to the user's goal.
+  const startNode = (plan.nodes || []).find((n) => n.type === 'start') || (plan.nodes || [])[0];
+  const userQuestion = startNode && startNode.title ? String(startNode.title).trim() : '';
   // Note: collectInputs already applies log-level fallback (summary -> title, info -> summary/title)
   const latestId = plan?.check_list?.latest_id || 'a';
   const latestBatch = typeof plan?.check_list?.latest_batch === 'number' ? plan.check_list.latest_batch : (() => {
@@ -189,16 +207,27 @@ export async function planNext() {
     outputType: OutputSchema,
   });
 
-  const userInput = [
-    '参考输入（check_list 对应值）：',
-    ...inputs.map((x, i) => `#${i + 1} ${x.ref} ->\n${x.value}`),
-  ].join('\n\n');
-  // Log the planning input (truncated)
-  console.error('[planning] built input:\n' + (userInput.length > 1200 ? userInput.slice(0, 1200) + '\n...[truncated]...' : userInput));
+  const sections = [];
+  if (userQuestion) sections.push('用户问题:\n' + userQuestion);
+  sections.push('参考输入（check_list 对应值）：', ...inputs.map((x, i) => `#${i + 1} ${x.ref} ->\n${x.value}`));
+  const userInput = sections.join('\n\n');
+  // Log the exact prompt components we pass to the model.
+  // Set env PLANNING_LOG_FULL=1 to disable truncation.
+  const __truncate = (s, n = 1600) => (s && s.length > n ? s.slice(0, n) + '\n...[truncated]...' : s);
+  const logFull = process.env.PLANNING_LOG_FULL === '1';
+  const showInstr = process.env.PLANNING_LOG_SHOW_INSTR === '1';
+  try {
+    console.error(`[planning] plan file: ${PLAN_PATH}`);
+    if (showInstr) {
+      const instr = instructions();
+      console.error('[planning] INSTRUCTIONS ->\n' + (logFull ? instr : __truncate(instr)));
+    }
+    console.error('[planning] USER_INPUT ->\n' + (logFull ? userInput : __truncate(userInput)));
+  } catch {}
 
   const result = await run(agent, userInput);
   const out = result.finalOutput; // structured object per zod
-  console.error('[planning] model output (parsed):\n' + JSON.stringify(out, null, 2));
+  console.error('[planning] MODEL_OUTPUT (parsed) ->\n' + JSON.stringify(out, null, 2));
 
   // Assign IDs to new tasks
   let curId = latestId;

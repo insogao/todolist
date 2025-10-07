@@ -12,7 +12,8 @@
     "plan": "node src/agents/planning_agent.js",
     "plan:test1": "node scripts/run-plan-on-copy.js fixtures/plan_stage1.json",
     "plan:test2": "node scripts/run-plan-on-copy.js fixtures/plan_stage2.json",
-    "plan:test3": "node scripts/run-plan-on-copy.js fixtures/plan_stage3.json"
+    "plan:test3": "node scripts/run-plan-on-copy.js fixtures/plan_stage3.json",
+    "workflow": "node scripts/run-workflow.js"
   },
   "engines": { "node": ">=18.17" },
   "dependencies": {

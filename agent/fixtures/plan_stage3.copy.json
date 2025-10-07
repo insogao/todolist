@@ -3,11 +3,10 @@
   "workflow_id": "demo-stage3",
   "created_at": "2025-10-07T00:20:00Z",
   "check_list": {
-    "latest_id": "e",
-    "latest_batch": 3,
+    "latest_id": "d",
+    "latest_batch": -1,
     "refs": [
-      "d:summary",
-      "e:summary"
+      "d:summary"
     ]
   },
   "nodes": [
@@ -43,22 +42,12 @@
     },
     {
       "node_id": "d",
-      "title": "核实阿里云近三年清洁能源使用比例变化趋势与数据来源",
+      "title": "整合阿里巴巴2024年ESG报告核心亮点：减排成效、清洁能源进展、AI医疗与治理安全",
       "summary": "",
       "info": "",
-      "p_node": "b:summary",
-      "batch": 3,
-      "type": "search",
-      "status": "planned"
-    },
-    {
-      "node_id": "e",
-      "title": "补充阿里云在AI伦理治理中具体落地的量化标准与第三方评估依据",
-      "summary": "",
-      "info": "",
-      "p_node": "c:summary",
-      "batch": 3,
-      "type": "search",
+      "p_node": "b:summary, c:summary",
+      "batch": -1,
+      "type": "summary",
       "status": "planned"
     }
   ]

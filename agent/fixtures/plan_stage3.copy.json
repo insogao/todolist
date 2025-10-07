@@ -1,0 +1,65 @@
+{
+  "version": "0.1",
+  "workflow_id": "demo-stage3",
+  "created_at": "2025-10-07T00:20:00Z",
+  "check_list": {
+    "latest_id": "e",
+    "latest_batch": 3,
+    "refs": [
+      "d:summary",
+      "e:summary"
+    ]
+  },
+  "nodes": [
+    {
+      "node_id": "a",
+      "title": "阿里巴巴2024年ESG报告的亮点",
+      "summary": "目标：梳理环境/社会/治理三方面关键信息，并形成最终总结。",
+      "info": "<info type=\"llm\"><![CDATA[已完成初步聚合，等待最终总结。]]></info>",
+      "p_node": "",
+      "batch": 1,
+      "type": "start",
+      "status": "completed"
+    },
+    {
+      "node_id": "b",
+      "title": "环境与平台减排亮点检索",
+      "summary": "阿里云赋能客户实现近千万吨级减排；自身清洁能源使用比例提升（需逐年对比）。",
+      "info": "<info type=\"llm\"><![CDATA[环境维度：生态减排与清洁电力。]]></info>",
+      "p_node": "a:summary",
+      "batch": 2,
+      "type": "search",
+      "status": "completed"
+    },
+    {
+      "node_id": "c",
+      "title": "社会与治理亮点检索",
+      "summary": "无障碍路径规模与 AI 医疗早筛案例；治理强调数据安全与 AI 伦理。",
+      "info": "<info type=\"llm\"><![CDATA[社会与治理维度：可进入总结收束。]]></info>",
+      "p_node": "a:summary",
+      "batch": 2,
+      "type": "search",
+      "status": "completed"
+    },
+    {
+      "node_id": "d",
+      "title": "核实阿里云近三年清洁能源使用比例变化趋势与数据来源",
+      "summary": "",
+      "info": "",
+      "p_node": "b:summary",
+      "batch": 3,
+      "type": "search",
+      "status": "planned"
+    },
+    {
+      "node_id": "e",
+      "title": "补充阿里云在AI伦理治理中具体落地的量化标准与第三方评估依据",
+      "summary": "",
+      "info": "",
+      "p_node": "c:summary",
+      "batch": 3,
+      "type": "search",
+      "status": "planned"
+    }
+  ]
+}

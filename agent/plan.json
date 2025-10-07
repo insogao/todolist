@@ -1,0 +1,72 @@
+{
+  "version": "0.1",
+  "workflow_id": "esg-2024-demo-001",
+  "created_at": "2025-10-07T02:00:00Z",
+  "check_list": {
+    "latest_id": "f",
+    "latest_batch":2,
+    "refs": []
+  },
+  "nodes": [
+    {
+      "node_id": "a",
+      "title": "阿里巴巴2024年ESG报告的亮点",
+      "summary": "目标：梳理阿里巴巴2024年ESG的核心亮点，聚焦环境/社会/治理三方面的关键信息与数据口径。",
+      "info": "<info type=\"llm\"><![CDATA[用户输入与任务界定：需要围绕阿里巴巴2024年ESG报告提炼关键亮点，并在后续通过检索验证具体数据与案例。]]></info>",
+      "p_node": "",
+      "batch": 1,
+      "type": "start",
+      "status": "completed"
+    },
+    {
+      "node_id": "b",
+      "title": "环境与平台减排亮点检索",
+      "summary": "阿里云2024财年赋能客户实现减排约988.4万吨；自身运营清洁能源使用比例提升，平台生态协同促进减排。",
+      "info": "<info type=\"llm\"><![CDATA[聚焦环境维度：验证云算力赋能的生态减排量级、数据中心能效与清洁电力使用趋势，并确认典型业务单元（如银泰、菜鸟）的绿色举措 [ref:1][ref:2]。]]></info>\n<info type=\"search\">\n  <searches>\n    <search step=\"1\" query=\"阿里巴巴 2024 ESG 环境 减排 988.4 万吨\" total=\"2\">\n      <result ref=\"1\" title=\"阿里巴巴2024年ESG：绿色算力赋能生态减排\" url=\"https://example.com/esg-env-2024\" siteName=\"示例网\" date=\"2024-07-23T08:00:00Z\">\n        <summary><![CDATA[报道指出阿里云在2024财年通过绿色算力与能效优化赋能客户实现近千万吨级的减排。]]></summary>\n      </result>\n      <result ref=\"2\" title=\"银泰百货清洁电力与绿色零售实践\" url=\"https://example.com/yintai-cleanpower\" siteName=\"示例网\" date=\"2024-07-25T10:00:00Z\">\n        <summary><![CDATA[零售场景清洁电力使用扩大与循环包装落地，体现平台生态协同减排。]]></summary>\n      </result>\n    </search>\n  </searches>\n</info>",
+      "p_node": "A : SUMMARY",
+      "batch": 2,
+      "type": "search",
+      "status": "completed"
+    },
+    {
+      "node_id": "c",
+      "title": "社会与治理亮点检索",
+      "summary": "高德轮椅导航覆盖约50城、提供千万级无障碍路径；达摩院PANDA早筛辅助胰腺癌早筛；治理侧强调数据安全与AI伦理。",
+      "info": "<info type=\"llm\"><![CDATA[聚焦社会与治理：验证轮椅导航覆盖与规模、医疗早筛的大模型案例、治理结构中数据安全/隐私/AI伦理安排 [ref:1][ref:2]。]]></info>\n<info type=\"search\">\n  <searches>\n    <search step=\"1\" query=\"阿里巴巴 2024 ESG 社会 无障碍 PANDA 轮椅导航 治理\" total=\"2\">\n      <result ref=\"1\" title=\"阿里2024 ESG：无障碍与AI医疗案例\" url=\"https://example.com/esg-soc-2024\" siteName=\"示例网\" date=\"2024-07-24T09:30:00Z\">\n        <summary><![CDATA[高德地图轮椅导航覆盖数十城并提供大量无障碍路径；PANDA模型用于胰腺癌早筛的探索性实践。]]></summary>\n      </result>\n      <result ref=\"2\" title=\"ESG治理结构与AI伦理框架更新\" url=\"https://example.com/esg-gov-2024\" siteName=\"示例网\" date=\"2024-07-26T11:20:00Z\">\n        <summary><![CDATA[报告强调治理透明度、数据安全与AI伦理要求的制度化建设。]]></summary>\n      </result>\n    </search>\n  </searches>\n</info>",
+      "p_node": "a:info[llm]",
+      "batch": 2,
+      "type": "search",
+      "status": "completed"
+    },
+    {
+      "node_id": "d",
+      "title": "综合总结与判断",
+      "summary": "阿里巴巴2024年ESG在环境（生态减排与清洁能源）、社会（无障碍与AI医疗）与治理（数据与AI治理）方面均有实质性进展；多来源交叉印证，可信度高。",
+      "info": "<info type=\"llm\"><![CDATA[整合 b、c 节点要点：\n- 环境：阿里云赋能客户实现约988.4万吨生态减排，自身运营清洁能源占比提升 [ref: b-1][ref: b-2]。\n- 社会：轮椅导航覆盖约50城、提供千万级无障碍路径；PANDA早筛模型用于公共健康探索 [ref: c-1]。\n- 治理：完善ESG治理结构，强化数据安全、隐私保护与AI伦理 [ref: c-2]。\n结论：以“技术+平台”驱动的系统性ESG实践得到多方佐证，整体可信度高。]]></info>",
+      "p_node": "b:summary, c:summary",
+      "batch": -1,
+      "type": "summary",
+      "status": "completed"
+    },
+    {
+      "node_id": "e",
+      "title": "综合阿里巴巴2024年ESG报告核心亮点：环境、社会与治理三维度整合分析",
+      "summary": "",
+      "info": "",
+      "p_node": "a:summary",
+      "batch": -1,
+      "type": "summary",
+      "status": "planned"
+    },
+    {
+      "node_id": "f",
+      "title": "生成最终总结报告",
+      "summary": "",
+      "info": "",
+      "p_node": "e:summary",
+      "batch": -1,
+      "type": "summary",
+      "status": "planned"
+    }
+  ]
+}

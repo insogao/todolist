@@ -6,3 +6,4 @@ dist/
 agent/agent.config.json
 agent/connect_demo.md
 connect_demo.md
+agent/README.md

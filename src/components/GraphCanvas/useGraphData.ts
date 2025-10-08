@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { Edge, Node } from '@xyflow/react';
 import { parseMermaidToGraph } from '../../lib/adapters/mermaidAdapter';
+import { parsePlanJsonToGraph } from '../../lib/adapters/planJsonAdapter';
 import { layoutWithElk } from '../../lib/layout/elk';
 import type { GraphData } from '../../lib/utils/types';
 
@@ -221,9 +222,16 @@ export function useGraphData() {
 
     const tick = async () => {
       try {
-        const res = await fetch('/data/graph.mmd', { cache: 'no-store' });
-        if (!res.ok) throw new Error('fetch mmd failed');
-        const text = await res.text();
+        // Prefer JSON-based plan; fall back to Mermaid if not present.
+        let text = '';
+        let mode: 'json' | 'mmd' = 'json';
+        let res = await fetch('/data/plan.json', { cache: 'no-store' });
+        if (!res.ok) {
+          mode = 'mmd';
+          res = await fetch('/data/graph.mmd', { cache: 'no-store' });
+          if (!res.ok) throw new Error('fetch data failed');
+        }
+        text = await res.text();
 
         console.log('🔍 Fetched data:', {
           length: text.length,
@@ -237,7 +245,7 @@ export function useGraphData() {
         if (text && (isInitialLoad.current || text !== lastRawRef.current)) {
           isInitialLoad.current = false;
           lastRawRef.current = text;
-          const graph: GraphData = parseMermaidToGraph(text);
+          const graph: GraphData = mode === 'json' ? parsePlanJsonToGraph(text) : parseMermaidToGraph(text);
 
           console.log('📊 Parsed graph:', {
             nodeCount: graph.nodes.length,

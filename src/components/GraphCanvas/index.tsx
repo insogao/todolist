@@ -17,7 +17,12 @@ export function GraphCanvas() {
   const { nodes, edges } = useGraphData();
   const didFitRef = React.useRef(false);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
-
+  const [query, setQuery] = useState('');
+  const [running, setRunning] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [selected, setSelected] = useState<Node | null>(null);
+  const [selectedRef, setSelectedRef] = useState<string | null>(null);
+  const sidebarScrollRef = React.useRef<HTMLDivElement | null>(null);
   const nodeTypes = useMemo(() => ({ card: NodeCard }), []);
 
   // 高亮相关边
@@ -45,6 +50,82 @@ export function GraphCanvas() {
       animated: highlightedEdges.has(edge.id),
     }));
   }, [edges, highlightedEdges]);
+
+  // 侧边栏渲染辅助：去标签、提取 info 块、解析搜索结果、把 [ref:n] 渲染为可点击
+  const stripTags = (s: string) => s.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+
+  const extractInfoBlocks = (xml?: string) => {
+    if (!xml) return { llm: '', search: '' } as const;
+    const pick = (type: 'llm' | 'search') => {
+      const re = new RegExp(`<info\\b[^>]*type\\s*=\\s*["']${type}["'][^>]*>([\\s\\S]*?)<\\/info>`, 'i');
+      const m = xml.match(re);
+      return m ? m[1] : '';
+    };
+    return { llm: pick('llm'), search: pick('search') } as const;
+  };
+
+  type SearchResult = { ref: string; title?: string; url?: string; siteName?: string; date?: string; summary?: string };
+  const parseSearchResults = (xml?: string): SearchResult[] => {
+    if (!xml) return [];
+    const results: SearchResult[] = [];
+    const re = /<result\b([^>]*)>([\s\S]*?)<\/result>/gi;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(xml))) {
+      const attrs = m[1] || '';
+      const body = m[2] || '';
+      const getAttr = (name: string) => {
+        const am = new RegExp(`${name}\\s*=\\s*\"([^\"]+)\"|${name}\\s*=\\s*'([^']+)'`, 'i').exec(attrs);
+        return am ? (am[1] || am[2] || '') : '';
+      };
+      const ref = getAttr('ref') || '';
+      const title = getAttr('title');
+      const url = getAttr('url');
+      const siteName = getAttr('siteName');
+      const date = getAttr('date');
+      const sm = /<summary[^>]*>([\s\S]*?)<\/summary>/i.exec(body);
+      let summary = sm ? sm[1] : '';
+      summary = summary.replace(/<!\[CDATA\[/g, '').replace(/\]\]>/g, '');
+      summary = stripTags(summary);
+      results.push({ ref, title, url, siteName, date, summary });
+    }
+    return results;
+  };
+
+  const renderRefLinkedText = (text: string) => {
+    const parts = text.split(/(\[ref:\s*(\d+)\])/gi);
+    const nodes: React.ReactNode[] = [];
+    for (let i = 0; i < parts.length; i++) {
+      const chunk = parts[i];
+      const mm = /^\[ref:\s*(\d+)\]$/i.exec(chunk);
+      if (mm) {
+        const refId = mm[1];
+        nodes.push(
+          <button
+            key={`ref-${i}`}
+            onClick={() => setSelectedRef(refId)}
+            style={{ color: 'var(--brand)', background: 'transparent', border: 'none', cursor: 'pointer', textDecoration: 'underline', padding: 0 }}
+            title={`跳转到搜索结果 ${refId}`}
+          >
+            [{`ref:${refId}`}] 
+          </button>
+        );
+      } else {
+        nodes.push(<span key={`t-${i}`}>{chunk}</span>);
+      }
+    }
+    return nodes;
+  };
+
+  // 当选择了某个 ref，滚动到对应的搜索结果块
+  useEffect(() => {
+    if (!selectedRef) return;
+    const el = document.getElementById(`search-ref-${selectedRef}`);
+    if (el && sidebarScrollRef.current) {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+  }, [selectedRef]);
+
+  
 
   // 调试：导出节点布局信息到文件
   useEffect(() => {
@@ -88,6 +169,45 @@ export function GraphCanvas() {
 
   return (
     <div style={{ width: '100%', height: '100%' }}>
+      {/* 控制面板：输入 query 并触发工作流 */}
+      <div style={{
+        position: 'fixed', top: 16, left: 16, zIndex: 1200,
+        background: 'var(--panel)', color: 'var(--foreground)',
+        border: '1px solid var(--card-border)', borderRadius: 8, padding: 12,
+        boxShadow: 'var(--shadow-lg)', width: 440, display: 'flex', gap: 8, alignItems: 'center'
+      }}>
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="输入你的问题，然后启动工作流"
+          style={{ flex: 1, padding: '8px 10px', borderRadius: 6, border: '1px solid var(--card-border)' }}
+        />
+        <button
+          onClick={async () => {
+            if (!query.trim()) { setMsg('请输入问题'); return; }
+            setRunning(true); setMsg('正在启动工作流...');
+            try {
+              const res = await fetch('/api/workflow/start', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query }) });
+              const data = await res.json();
+              if (!res.ok || !data?.ok) throw new Error(data?.message || '启动失败');
+              setMsg('已启动：生成过程会逐步更新流程图');
+            } catch (e: any) {
+              setMsg(e?.message || String(e));
+            } finally { setRunning(false); }
+          }}
+          disabled={running}
+          style={{ padding: '8px 12px', background: 'var(--brand)', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer', fontWeight: 600 }}
+        >
+          {running ? '运行中…' : '启动工作流'}
+        </button>
+      </div>
+
+      {/* 轻量状态提示 */}
+      {msg && (
+        <div style={{ position: 'fixed', top: 70, left: 16, zIndex: 1200, color: 'var(--muted-foreground)', fontSize: 12 }}>
+          {msg}
+        </div>
+      )}
       {/* 调试按钮 */}
       {nodes.length > 0 && (
         <button
@@ -132,6 +252,8 @@ export function GraphCanvas() {
         proOptions={{ hideAttribution: true }}
         onNodeMouseEnter={(_, node) => setHoveredNode(node.id)}
         onNodeMouseLeave={() => setHoveredNode(null)}
+        onNodeClick={(_, node) => { setSelected(node as Node); setSelectedRef(null); }}
+        onPaneClick={() => { setSelected(null); setSelectedRef(null); }}
         onInit={(instance) => {
           if (!didFitRef.current && nodes.length > 0) {
             try {
@@ -166,6 +288,90 @@ export function GraphCanvas() {
         />
         <Controls />
       </ReactFlow>
+
+      {/* 右侧侧边栏：节点详情 */}
+      <aside
+        style={{
+          position: 'fixed', top: 0, right: 0, height: '100%', width: selected ? 420 : 0,
+          transition: 'width 0.2s ease', overflow: 'hidden',
+          background: 'var(--panel)', color: 'var(--foreground)', borderLeft: '1px solid var(--card-border)',
+          zIndex: 1300, boxShadow: 'var(--shadow-lg)'
+        }}
+      >
+        {selected && (
+          <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderBottom: '1px solid var(--card-border)' }}>
+              <div style={{ fontWeight: 700 }}>节点详情</div>
+              <button onClick={() => setSelected(null)} style={{ border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 18 }}>×</button>
+            </div>
+            <div style={{ padding: 16, overflow: 'auto' }}>
+              {(() => {
+                const data = (selected.data as any) || {};
+                const raw = data.raw || {};
+                const title = String(data.label || raw.title || selected.id || '');
+                const { llm: llmRaw, search: searchRaw } = extractInfoBlocks(raw.info);
+                const llm = stripTags(llmRaw);
+                const summary = typeof raw.summary === 'string' ? stripTags(raw.summary) : '';
+                const searchResults = parseSearchResults(searchRaw);
+                return (
+                  <div>
+                    <div style={{ fontSize: 14, color: 'var(--muted-foreground)', marginBottom: 6 }}>ID: #{selected.id}</div>
+                    <h3 style={{ fontSize: 18, margin: '6px 0 10px 0' }}>{title}</h3>
+
+                    {summary && (
+                      <section style={{ marginBottom: 16 }}>
+                        <div style={{ fontWeight: 600, marginBottom: 6 }}>Summary</div>
+                        <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{summary}</div>
+                      </section>
+                    )}
+
+                    {llm && (
+                      <section style={{ marginBottom: 16 }}>
+                        <div style={{ fontWeight: 600, marginBottom: 6 }}>LLM 生成</div>
+                        <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>
+                          {renderRefLinkedText(llm)}
+                        </div>
+                      </section>
+                    )}
+
+                    {searchResults.length > 0 && (
+                      <section>
+                        <div style={{ fontWeight: 600, marginBottom: 6 }}>搜索结果</div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                          {searchResults.map((r) => (
+                            <div
+                              key={`sr-${r.ref}`}
+                              id={`search-ref-${r.ref}`}
+                              onClick={() => setSelectedRef(r.ref)}
+                              style={{
+                                border: '1px solid var(--card-border)', borderRadius: 8, padding: 10,
+                                background: selectedRef === r.ref ? 'rgba(23,92,211,0.08)' : 'transparent', cursor: 'pointer'
+                              }}
+                            >
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                                <span style={{ fontWeight: 700, color: 'var(--brand)' }}>[{r.ref}]</span>
+                                <a href={r.url} target="_blank" rel="noreferrer" style={{ fontWeight: 600, color: 'var(--foreground)' }}>
+                                  {r.title || r.url || '未命名结果'}
+                                </a>
+                              </div>
+                              <div style={{ fontSize: 12, color: 'var(--muted-foreground)', marginBottom: 6 }}>
+                                {r.siteName || ''} {r.date ? `· ${new Date(r.date).toLocaleString()}` : ''}
+                              </div>
+                              {r.summary && (
+                                <div style={{ whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{r.summary}</div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </section>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+      </aside>
     </div>
   );
 }

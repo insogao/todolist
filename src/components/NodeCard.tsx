@@ -49,6 +49,10 @@ export default function NodeCard({ data, selected }: NodeProps) {
   const isMilestone = raw?.type === 'circle';
   const badgeType = isMilestone ? 'milestone' : 'task';
   const badgeText = isMilestone ? '🎯 Milestone' : '📋 Task';
+  // Optional short content (from planning JSON summary). Strip tags and collapse spaces.
+  const summaryText: string | undefined = typeof raw?.summary === 'string'
+    ? raw.summary.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+    : undefined;
 
   // 固定为左进右出
   const sourcePos = Position.Right;
@@ -107,6 +111,11 @@ export default function NodeCard({ data, selected }: NodeProps) {
         <div className="status-indicator" />
         <div className="content">
           <div className="title">{label}</div>
+          {summaryText && (
+            <div className="desc" style={{ color: 'var(--muted-foreground)', fontSize: 12, marginTop: 6, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+              {summaryText}
+            </div>
+          )}
           <div className="meta">
             <span className={`badge ${badgeType}`}>{badgeText}</span>
             {raw?.id && <span className="node-id">#{raw.id}</span>}

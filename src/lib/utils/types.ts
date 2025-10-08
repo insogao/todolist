@@ -3,6 +3,10 @@ export type Direction = 'TD' | 'LR';
 export interface GraphNode {
   id: string;
   title: string;
+  // Optional short description/content to render under the title (from planning JSON summary)
+  summary?: string;
+  // Raw info XML from planning JSON (<info type="llm">, <info type="search">)
+  info?: string;
   type?: 'rect' | 'circle';
   width?: number;
   height?: number;

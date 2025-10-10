@@ -46,13 +46,33 @@ const HandleDot = ({
 
 export default function NodeCard({ data, selected }: NodeProps) {
   const { label, raw } = data as any;
+  const agentType: string | undefined = raw?.agentType;
   const isMilestone = raw?.type === 'circle';
-  const badgeType = isMilestone ? 'milestone' : 'task';
-  const badgeText = isMilestone ? '🎯 Milestone' : '📋 Task';
   // Optional short content (from planning JSON summary). Strip tags and collapse spaces.
   const summaryText: string | undefined = typeof raw?.summary === 'string'
     ? raw.summary.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
     : undefined;
+  const [expanded, setExpanded] = React.useState(false);
+  const rootRef = React.useRef<HTMLDivElement | null>(null);
+
+  // Flags
+  // Final badge：以 batch === -1 判断最终节点
+  const isFinal = typeof raw?.batch === 'number' && raw.batch === -1;
+  // Search badge：仅当 info 中存在 <info type="search">（即真实有搜索结果）才显示
+  const hasSearchInfo = typeof raw?.info === 'string' && /<info\b[^>]*type\s*=\s*["']search["']/i.test(raw.info);
+
+  // 当展开时，把最近的 React Flow 节点容器置于最顶层，避免被其他节点遮挡
+  React.useEffect(() => {
+    const host = rootRef.current?.closest('.react-flow__node') as HTMLElement | null;
+    if (!host) return;
+    const prevZ = host.style.zIndex;
+    if (expanded) host.style.zIndex = '10000';
+    else host.style.zIndex = prevZ || '';
+    return () => {
+      // 清理：恢复原有 z-index
+      host.style.zIndex = prevZ || '';
+    };
+  }, [expanded]);
 
   // 固定为左进右出
   const sourcePos = Position.Right;
@@ -106,22 +126,58 @@ export default function NodeCard({ data, selected }: NodeProps) {
   }
 
   return (
-    <div className="node-card" style={{ outline: selected ? '2px solid var(--brand)' : 'none' }}>
+    <div
+      ref={rootRef}
+      className={`node-card${agentType ? ` node-card--${agentType}` : ''}${raw?.status === 'running' ? ' node-card--running' : ''}`}
+      style={{ outline: selected ? '2px solid var(--brand)' : 'none', position: 'relative', overflow: 'visible', cursor: 'pointer', zIndex: expanded ? 2000 : undefined, boxShadow: expanded ? 'var(--shadow-lg)' : undefined }}
+      onMouseEnter={() => setExpanded(true)}
+      onMouseLeave={() => setExpanded(false)}
+    >
       <div className="content-wrapper">
         <div className="status-indicator" />
         <div className="content">
+          {/* Top inline red badges */}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 4 }}>
+            {isFinal && (
+              <span style={{ color: 'var(--danger)', fontSize: 11, fontWeight: 700 }}>最终总结-查看报告</span>
+            )}
+            {hasSearchInfo && (
+              <span style={{ color: 'var(--danger)', fontSize: 11, fontWeight: 700 }}>搜索信息</span>
+            )}
+          </div>
           <div className="title">{label}</div>
           {summaryText && (
-            <div className="desc" style={{ color: 'var(--muted-foreground)', fontSize: 12, marginTop: 6, lineHeight: 1.3, display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+            <div
+              className="desc"
+              style={expanded ? {
+                color: 'var(--muted-foreground)',
+                fontSize: 12,
+                marginTop: 6,
+                lineHeight: 1.35,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word'
+              } : {
+                color: 'var(--muted-foreground)',
+                fontSize: 12,
+                marginTop: 6,
+                lineHeight: 1.35,
+                display: '-webkit-box',
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden'
+              }}
+            >
               {summaryText}
             </div>
           )}
-          <div className="meta">
-            <span className={`badge ${badgeType}`}>{badgeText}</span>
-            {raw?.id && <span className="node-id">#{raw.id}</span>}
-          </div>
+          {!summaryText && raw?.status === 'running' && (
+            <div style={{ color: 'var(--muted-foreground)', fontSize: 12, marginTop: 6 }}>
+              分析中<span className="loading-dots">...</span>
+            </div>
+          )}
         </div>
       </div>
+      {/* Click to toggle expansion; no hover preview */}
       {targetHandles}
       {sourceHandles}
     </div>

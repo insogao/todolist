@@ -9,23 +9,29 @@ export function parsePlanJsonToGraph(src: string): GraphData {
     json = JSON.parse(src);
   } catch (e) {
     // Return empty graph on parse error
-    return { direction: 'TD', nodes: [], edges: [] };
+    return { direction: 'LR', nodes: [], edges: [] };
   }
 
   const nodes: GraphNode[] = [];
   const edges: GraphEdge[] = [];
 
   const items: any[] = Array.isArray(json?.nodes) ? json.nodes : [];
+  const latestId = String(json?.check_list?.latest_id || '').toLowerCase();
 
   // Build node list
   for (const it of items) {
     if (!it || !it.node_id) continue;
     const type = inferNodeType(it?.type);
+    const title = String(it.title ?? it.node_id);
+    const summaryRaw = typeof it.summary === 'string' ? it.summary : '';
     nodes.push({
       id: String(it.node_id),
-      title: String(it.title ?? it.node_id),
-      summary: typeof it.summary === 'string' ? it.summary : undefined,
+      title,
+      summary: summaryRaw || undefined,
       info: typeof it.info === 'string' ? it.info : undefined,
+      agentType: typeof it.type === 'string' ? (String(it.type).toLowerCase() as any) : undefined,
+      status: typeof it.status === 'string' ? (String(it.status).toLowerCase() as any) : undefined,
+      batch: typeof it.batch === 'number' ? it.batch : undefined,
       type,
     });
   }
@@ -44,7 +50,19 @@ export function parsePlanJsonToGraph(src: string): GraphData {
     }
   }
 
-  return { direction: 'TD', nodes, edges, metadata: { updatedAt: new Date().toISOString() } };
+  // Mark latest node
+  if (latestId) {
+    for (const n of nodes) {
+      if (n.id.toLowerCase() === latestId) {
+        (n as any).isLatest = true;
+        break;
+      }
+    }
+  }
+
+  const dirRaw = String(json?.direction || '').toUpperCase();
+  const direction = dirRaw === 'TD' ? 'TD' : 'LR';
+  return { direction, nodes, edges, metadata: { updatedAt: new Date().toISOString() } };
 }
 
 function inferNodeType(t?: string): GraphNode['type'] {

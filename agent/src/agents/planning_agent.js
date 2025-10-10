@@ -108,6 +108,8 @@ const OutputSchema = z.object({
   })).max(3),
   // next_check_list may reference placeholders NEW1..NEW3, e.g., "NEW1:summary"
   next_check_list: z.array(z.string()),
+  // short progress note for current investigation status (required by structured outputs API)
+  note: z.string(),
 });
 
 function instructions() {
@@ -115,7 +117,7 @@ function instructions() {
   // that could nudge the model to emit non‑JSON text. The Agents SDK enforces the schema;
   // we just make the intent crisp.
   return `你是一个规划助手（Planning Agent）。
-目标：基于给定参考输入，规划“下一批次”的任务（0–3个）并给出下一轮 check_list。
+目标：基于给定参考输入，规划“下一批次”的任务（0–3 个）并给出下一轮 check_list。
 
 输出：严格 JSON（只返回 JSON，本行之外不要输出任何文本、代码块或注释）。
 {
@@ -123,7 +125,8 @@ function instructions() {
   "tasks": [
     { "title": string, "type": "search" | "summary", "p_node": string }
   ],
-  "next_check_list": [string]
+  "next_check_list": [string],
+  "note": string
 }
 
 字段约束：
@@ -131,35 +134,48 @@ function instructions() {
 - type："search"（补充事实与证据）或 "summary"（整合/收束）。
 - p_node：父节点引用；大小写/空格不敏感；格式：id:summary 或 id:info[llm|search|all]；多源用英文逗号分隔，如 "b:summary, c:summary"。
 - next_check_list：允许引用既有节点（如 "a:summary"、"c:info[llm]"）与本轮新任务，占位符 NEW1/NEW2/NEW3 对应 tasks[0..2]，如 "NEW1:summary"。
+ - note：用一段简短中文笔记同步调查进展，格式示例："调查方向a：调查中；调查方向b：已完成无参考价值；调查方向c：有参考价值"。避免无用赘述。
 
- 规划策略：
- - 首先判断现有信息覆盖是否充足；若已足够产出最终结论，则设 is_final=true，并创建 1 个 "summary" 任务汇总关键上游（如 "b:summary, c:summary"）。
- - 若存在明显信息缺口或需交叉验证：优先生成 1–2 个有针对性的 "search" 任务（量化口径、来源核验、矛盾点澄清等）。
- - 避免与历史节点重复；每轮任务应实质推进到可总结状态。
- - 当没有有意义的新任务时，允许 tasks 为空，并维持 is_final=false。
+输入与依据（客观性要求）：
+- 充分利用参考输入中的 <info type="search">（SERP）结构化结果，识别其中的实体/术语/机构/关键指标/时间范围，作为后续拆解依据。
+- 当提出新搜索方向时，先在心中构建“搜索分面图”（无需输出）：
+  1) 基于现有 SERP 结果与摘要里的高频要素；
+  2) 结合搜索引擎通识（同义词/别名、时间/地域限定、filetype、site:gov/edu、权威来源/官方报告/学术综述等）。
+  在此基础上，选取 1–2 个“可执行、收敛且互补”的检索方向，避免只凭主观经验设题。
 
-搜索生成原则（重要）：
-- 默认不新增 search 仅为“补细节/核对准确性”。应首先相信现有搜索节点的专业性，优先通过 summary 聚合来整合并标注不确定性。
-- 只有当“上一轮搜索带来了全新的且重要的调查方向”，且该方向无法由现有节点的总结充分覆盖时，才新增下一轮 search；数量控制在 1–2 个，避免横向重复。
-- 在新增 search 尚未产出结果之前，务必保留关键既有节点的引用（见 next_check_list 策略），不要过早放弃原始信息基线。
+规划策略：
+- 若现有信息已足以产出最终结论：设 is_final=true，并创建 1 个 summary 任务，汇总关键有价值的上游节点（如 "b:summary, c:summary"）。
+- 若存在信息缺口或需交叉验证：优先生成 1–2 个针对性的 search 任务（量化口径、来源核验、矛盾点澄清等）。
+- 避免与历史节点重复；每轮任务应推动到可总结状态；无意义时允许 tasks 为空。
 
-next_check_list 策略（重要）：
-- 谨慎剔除：仅在“当前已知节点的信息明显没有参考价值”，或“后续智能体将提供的信息已充分覆盖该节点内容”时，才考虑从 next_check_list 中移除该节点引用。
-- 保守保留：如果不确定新的检索方向能带回更有价值的信息，应保留原有节点引用，避免过早放弃已有信息来源。
-- 新旧平衡：当新增搜索方向尚未产出结果时，务必保留关键的既有节点（如核心 summary）的引用，以确保下一轮仍能基于可靠基线继续规划。
+搜索生成原则（强化）：
+- 先看 <info type="search"> 覆盖了什么，再决定是否需要新 search；已覆盖的方向转为 summary 聚合更优。
+- 对于入门/领域初探，优先考虑以下客观分面（择优 1–2 个）：
+  定义/框架/术语、权威机构与官方发布、行业/学术综述、对比评测/竞品格局、关键指标/数据口径、时间线/里程碑（注意时间限定）。
+- 新任务的 p_node 应引用信息量最大的上游（常见为 x:info[search] 与关键 summary）。
 
-终局判断（重要）：
-- 若本轮主要产出的是对多节点的“汇总/收束”任务，且没有新的搜索方向（没有 "search" 类型任务），则将 is_final 设为 true，产出唯一的最终总结任务（引用关键上游，如 "b:summary, c:summary"）。
-- 最终总结的 next_check_list 通常只需保留 NEW1:summary（即最终总结本身），除非业务需要继续跟踪其他特定节点。
+任务数量与收敛：
+- 默认不新增 search 仅为“补细节/核对准确性”，优先用 summary 聚合并标注不确定性。
+- 仅当出现“全新且重要”的调查方向且无法由现有节点总结覆盖时，才新增 1–2 个 search；避免横向重复。
+- 在新 search 未产出结果前，保留关键既有节点引用（见 next_check_list 策略），不要过早放弃信息基线。
+- 在没有新的search产生的规划的情况下，更倾向于进行进行最终的聚合总结，除非目前的线索过多需要分别进行交叉验证产生阶段性结论
 
-单一示例（仅示意，不要在输出中包含此示例）：
+next_check_list 策略：
+- 谨慎剔除，仅在确无参考价值或已被覆盖时移除；否则保留核心 summary 引用。
+- 新旧平衡：在新增搜索未出结果前，保留关键既有节点，确保下一轮仍有可靠基线。
+
+终局判断：
+- 若本轮仅产出总结类（无 search），设 is_final=true，并生成唯一最终总结任务（如 "b:summary, c:summary"）。
+
+示例（仅示意，不要在输出中包含此示例）：
 {
   "is_final": false,
   "tasks": [
-    { "title": "补充治理侧 AI 伦理的量化指标与来源核验", "type": "search", "p_node": "c:summary" },
-    { "title": "细化环境维度清洁电力口径与时间范围", "type": "search", "p_node": "b:summary" }
+    { "title": "权威机构（ISO/IEC、NIST、国家标准）对<主题>的定义与术语（近3年）", "type": "search", "p_node": "a:info[search]" },
+    { "title": "行业综述/对比评测：主流方案与关键指标（近2年）", "type": "search", "p_node": "a:info[search]" }
   ],
-  "next_check_list": ["a:summary", "NEW1:summary", "NEW2:summary"]
+  "next_check_list": ["a:summary", "NEW1:summary", "NEW2:summary"],
+  "note": "方向A：调查中；方向B：已完成参考价值；方向C：已完成有参考价值"
 }`;
 }
 
@@ -209,6 +225,9 @@ export async function planNext() {
 
   const sections = [];
   if (userQuestion) sections.push('用户问题:\n' + userQuestion);
+  // include persisted note to help the planner understand current progress
+  const persistedNote = (plan?.check_list && typeof plan.check_list.note === 'string') ? plan.check_list.note : '';
+  if (persistedNote && persistedNote.trim()) sections.push('当前调查笔记（note）：\n' + persistedNote.trim());
   sections.push('参考输入（check_list 对应值）：', ...inputs.map((x, i) => `#${i + 1} ${x.ref} ->\n${x.value}`));
   const userInput = sections.join('\n\n');
   // Log the exact prompt components we pass to the model.
@@ -273,6 +292,7 @@ export async function planNext() {
     latest_id: assigned.length ? assigned[assigned.length - 1].node_id : latestId,
     latest_batch: assigned.length ? (out.is_final ? -1 : nextBatch) : (plan?.check_list?.latest_batch ?? nextBatch),
     refs: nextRefs,
+    note: typeof out.note === 'string' ? out.note : (plan?.check_list?.note || ''),
   };
 
   writePlan(plan);

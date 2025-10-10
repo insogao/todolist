@@ -30,6 +30,14 @@ function ensureDir(p) {
 
 function nowISO() { return new Date().toISOString(); }
 
+// Excel-like a..z, aa..az
+function excelNext(id) {
+  if (!id) return 'a';
+  const toNum = (s) => String(s).toLowerCase().split('').reduce((n, ch) => n * 26 + (ch.charCodeAt(0) - 96), 0);
+  const toStr = (n) => { let r = ''; while (n > 0) { const rem = (n - 1) % 26; r = String.fromCharCode(97 + rem) + r; n = Math.floor((n - 1) / 26); } return r || 'a'; };
+  return toStr(toNum(id) + 1);
+}
+
 function newPlanFromQuery(query) {
   const created = nowISO();
   return {
@@ -60,7 +68,7 @@ function spawnNode(scriptPath, args = [], env = {}) {
   });
 }
 
-async function withRetry(fn, { tries = 3, baseDelayMs = 1500 } = {}) {
+async function withRetry(fn, { tries = 5, baseDelayMs = 2000 } = {}) {
   let lastErr;
   for (let i = 0; i < tries; i++) {
     try { return await fn(); } catch (e) {
@@ -68,7 +76,8 @@ async function withRetry(fn, { tries = 3, baseDelayMs = 1500 } = {}) {
       const msg = String(e?.message || e || '').toLowerCase();
       const retriable = msg.includes('429') || msg.includes('rate limit') || msg.includes('timeout') || msg.includes('temporarily unavailable');
       if (!retriable || i === tries - 1) break;
-      const wait = baseDelayMs * Math.pow(2, i);
+      // Linear backoff: 2s, 4s, 6s, 8s, 10s (per retry index)
+      const wait = baseDelayMs * (i + 1);
       console.error(`[workflow] retry in ${wait} ms due to: ${e?.message || e}`);
       await new Promise((r) => setTimeout(r, wait));
     }
@@ -144,7 +153,9 @@ async function executeTask(planPath, task) {
   const plan = readJson(planPath);
   const ctx = buildContextFromRefs(plan, task.p_node);
   if (task.type === 'search') {
-    const question = ctx ? `${task.title}\n\n参考输入：\n${ctx}` : task.title;
+    // For search tasks, ONLY use the node title as the query.
+    // Do not include any prior context to avoid biasing new searches.
+    const question = task.title;
     const out = await runSearchAgent(question);
     const summary = parseSummary(out) || '<summary>（无摘要）</summary>';
     const infoLlm = extractInfoBlock(out, 'llm');
@@ -155,7 +166,7 @@ async function executeTask(planPath, task) {
     const text = ctx || task.title;
     const out = await runSummaryAgent(text);
     const summary = parseSummary(out) || '<summary>（无摘要）</summary>';
-    const info = '';
+    const info = extractInfoBlock(out, 'llm') || '';
     return { summary, info };
   }
   throw new Error(`unknown task type: ${task.type}`);
@@ -169,6 +180,17 @@ function writeNodeResult(planPath, nodeId, result) {
   node.summary = result.summary || node.summary || '';
   if (result.info) node.info = (node.info ? `${node.info}\n\n` : '') + result.info;
   node.status = 'completed';
+  node.updated_at = nowISO();
+  plan.nodes[idx] = node;
+  writeJson(planPath, plan);
+}
+
+function writeNodeStatus(planPath, nodeId, status) {
+  const plan = readJson(planPath);
+  const idx = (plan.nodes || []).findIndex((n) => String(n.node_id).toLowerCase() === String(nodeId).toLowerCase());
+  if (idx < 0) return; // ignore silently
+  const node = plan.nodes[idx];
+  node.status = status;
   node.updated_at = nowISO();
   plan.nodes[idx] = node;
   writeJson(planPath, plan);
@@ -196,18 +218,21 @@ async function main() {
     }
   }
 
-  const MAX_ROUNDS = Number(process.env.WORKFLOW_MAX_ROUNDS || 8);
+  // Upper bound on planning-execution rounds. Override via WORKFLOW_MAX_ROUNDS.
+  // Increased default from 8 -> 16 to better accommodate longer investigations.
+  const MAX_ROUNDS = Number(process.env.WORKFLOW_MAX_ROUNDS || 16);
   const CONCURRENCY = Math.max(1, Number(process.env.WORKFLOW_CONCURRENCY || 3));
+  let endedByCap = true;
   for (let round = 1; round <= MAX_ROUNDS; round++) {
     console.error(`\n[workflow] === Round ${round} planning (concurrency=${CONCURRENCY}) ===`);
-    const { planned } = await runPlanning(planPath);
+    const { planned } = await withRetry(() => runPlanning(planPath), { tries: 5, baseDelayMs: 2000 });
     if (!planned.length) {
       console.error('[workflow] no tasks planned; stop.');
+      endedByCap = false;
       break;
     }
     // Run with limited concurrency; collect results, then write back sequentially.
     const queue = planned.map((task, idx) => ({ task, idx }));
-    const results = new Array(planned.length);
     let cursor = 0;
     async function workerThread(id) {
       while (true) {
@@ -215,30 +240,58 @@ async function main() {
         if (!next) break;
         const t = next.task;
         console.error(`[workflow] executing ${t.node_id} (${t.type}) :: ${t.title}`);
+        // mark as running immediately for incremental UI updates
+        try { writeNodeStatus(planPath, t.node_id, 'running'); } catch {}
         try {
-          const res = await withRetry(() => executeTask(planPath, t), { tries: 3, baseDelayMs: 2000 });
-          results[next.idx] = { task: t, result: res };
+          const res = await withRetry(() => executeTask(planPath, t), { tries: 5, baseDelayMs: 2000 });
+          // write back this node immediately after it finishes
+          writeNodeResult(planPath, t.node_id, res);
           console.error(`[workflow] completed ${t.node_id}`);
         } catch (e) {
           console.error(`[workflow] task ${t.node_id} failed: ${e?.message || e}`);
+          try { writeNodeStatus(planPath, t.node_id, 'failed'); } catch {}
           throw e;
         }
       }
     }
     const workers = Array.from({ length: Math.min(CONCURRENCY, queue.length) }, (_, i) => workerThread(i + 1));
     await Promise.all(workers);
-    for (const item of results) {
-      if (!item) continue;
-      writeNodeResult(planPath, item.task.node_id, item.result);
-    }
     const plan = readJson(planPath);
     const latestBatch = plan?.check_list?.latest_batch;
     if (latestBatch === -1) {
       console.error('[workflow] reached final batch (-1); stop.');
+      endedByCap = false;
       break;
     }
   }
-  console.error('[workflow] done.');
+  if (endedByCap) {
+    console.error(`[workflow] stopped after MAX_ROUNDS=${MAX_ROUNDS} without final batch. Scheduling final summary…`);
+    try {
+      // Build a final summary node that aggregates current refs
+      const plan = readJson(planPath);
+      const refs = Array.isArray(plan?.check_list?.refs) ? plan.check_list.refs.filter(Boolean) : [];
+      const lastId = String(plan?.check_list?.latest_id || ((plan.nodes||[]).slice(-1)[0]?.node_id) || 'a');
+      const nid = excelNext(lastId);
+      const title = '最终总结报告（自动收束）';
+      const p_node = refs.length ? refs.join(', ') : String((plan.nodes||[]).slice(-2).map(n=>`${n.node_id}:summary`).join(', '));
+      // Append node as planned, batch -1
+      plan.nodes.push({ node_id: nid, title, summary: '', info: '', p_node, batch: -1, type: 'summary', status: 'planned', updated_at: nowISO() });
+      plan.check_list.latest_id = nid;
+      plan.check_list.latest_batch = -1;
+      plan.check_list.refs = [`${nid}:summary`];
+      writeJson(planPath, plan);
+
+      // Execute the final summary immediately
+      const res = await executeTask(planPath, { node_id: nid, title, type: 'summary', p_node });
+      writeNodeResult(planPath, nid, res);
+      console.error(`[workflow] final summary node ${nid} completed.`);
+    } catch (e) {
+      console.error('[workflow] failed to write final summary at cap:', e?.message || e);
+    }
+    console.error(`[workflow] stopped after MAX_ROUNDS=${MAX_ROUNDS}. Increase WORKFLOW_MAX_ROUNDS for longer runs.`);
+  } else {
+    console.error('[workflow] done.');
+  }
 }
 
 main().catch((err) => {

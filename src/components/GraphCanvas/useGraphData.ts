@@ -3,7 +3,7 @@ import type { Edge, Node } from '@xyflow/react';
 import { parseMermaidToGraph } from '../../lib/adapters/mermaidAdapter';
 import { parsePlanJsonToGraph } from '../../lib/adapters/planJsonAdapter';
 import { layoutWithElk } from '../../lib/layout/elk';
-import type { GraphData } from '../../lib/utils/types';
+import type { GraphData, Direction } from '../../lib/utils/types';
 
 const POLL_MS = 1000;
 const USE_ELK_LAYOUT = false; // 关闭 ELK，使用稳定增量布局避免节点跳动
@@ -103,7 +103,13 @@ function stableLayout(graph: GraphData, prevPos: Map<string, { x: number; y: num
     }
 
     const parents = parentsByChild.get(id) ?? [];
-    const parentKnown = parents.find((p) => pos.has(p));
+    // 选择“最靠近子节点布局方向”的父节点，避免多父情况下被拉回到中间
+    // LR：取 x 最大（最右侧）的已定位父节点；TD：取 y 最大（最下方）的已定位父节点
+    const placedParents = parents.filter((p) => pos.has(p));
+    const parentKnown = placedParents.sort((a, b) => {
+      const pa = pos.get(a)!; const pb = pos.get(b)!;
+      return graph.direction === 'LR' ? (pb.x - pa.x) : (pb.y - pa.y);
+    })[0];
 
     if (!parentKnown) {
       // 没有已知父节点：作为新根节点
@@ -142,74 +148,54 @@ function stableLayout(graph: GraphData, prevPos: Map<string, { x: number; y: num
     };
 
     if (graph.direction === 'TD') {
-      // 垂直布局
-      if (siblings.length === 0) {
-        // 第一个子节点
-        let baseX = parentPos.x;
-        let baseY = parentPos.y + sizeOf(parentKnown).h + V_GAP;
+      // 垂直布局：子节点横向排布（按索引确定列），再做碰撞微调
+      const allChildren = childrenByParent.get(parentKnown) ?? [];
+      const orderIndex = Math.max(0, allChildren.indexOf(id));
+      let baseX = parentPos.x + orderIndex * (RECT_W + SIB_GAP);
+      let baseY = parentPos.y + sizeOf(parentKnown).h + V_GAP;
 
-        // 避免碰撞
-        while (checkCollision(baseX, baseY)) {
-          baseX += SIB_GAP;
-        }
-
-        pos.set(id, { x: baseX, y: baseY });
-        globalYRanges.push({ minY: baseY, maxY: baseY + h, minX: baseX, maxX: baseX + w });
-      } else {
-        // 后续兄弟节点：在右侧排列
-        const siblingPositions = siblings.map(s => pos.get(s)!);
-        const siblingWidths = siblings.map(s => sizeOf(s).w);
-        const maxSiblingX = Math.max(...siblingPositions.map((p, i) => p.x + siblingWidths[i]));
-        const referenceY = siblingPositions[0].y;
-        let baseX = maxSiblingX + SIB_GAP;
-        let baseY = referenceY;
-
-        // 避免碰撞
-        while (checkCollision(baseX, baseY)) {
-          baseY += SIB_GAP;
-        }
-
-        pos.set(id, { x: baseX, y: baseY });
-        globalYRanges.push({ minY: baseY, maxY: baseY + h, minX: baseX, maxX: baseX + w });
+      // 碰撞微调：先沿 X 轴右移，再必要时少量下移
+      let attempts = 0;
+      while (checkCollision(baseX, baseY) && attempts < 200) {
+        baseX += Math.floor((RECT_W + SIB_GAP) / 2);
+        attempts++;
       }
+      attempts = 0;
+      while (checkCollision(baseX, baseY) && attempts < 200) {
+        baseY += Math.floor(SIB_GAP / 2);
+        attempts++;
+      }
+
+      pos.set(id, { x: baseX, y: baseY });
+      globalYRanges.push({ minY: baseY, maxY: baseY + h, minX: baseX, maxX: baseX + w });
     } else {
-      // 水平布局
-      if (siblings.length === 0) {
-        // 第一个子节点
-        let baseX = parentPos.x + sizeOf(parentKnown).w + H_GAP;
-        let baseY = parentPos.y;
+      // 水平布局：子节点纵向排布（按索引确定行），再做碰撞微调
+      const allChildren = childrenByParent.get(parentKnown) ?? [];
+      const orderIndex = Math.max(0, allChildren.indexOf(id));
+      let baseX = parentPos.x + sizeOf(parentKnown).w + H_GAP;
+      let baseY = parentPos.y + orderIndex * (RECT_H + SIB_GAP);
 
-        // 避免碰撞
-        while (checkCollision(baseX, baseY)) {
-          baseY += SIB_GAP;
-        }
-
-        pos.set(id, { x: baseX, y: baseY });
-        globalYRanges.push({ minY: baseY, maxY: baseY + h, minX: baseX, maxX: baseX + w });
-      } else {
-        // 后续兄弟节点：在下方排列
-        const siblingPositions = siblings.map(s => pos.get(s)!);
-        const siblingHeights = siblings.map(s => sizeOf(s).h);
-        const maxSiblingY = Math.max(...siblingPositions.map((p, i) => p.y + siblingHeights[i]));
-        const referenceX = siblingPositions[0].x;
-        let baseX = referenceX;
-        let baseY = maxSiblingY + SIB_GAP;
-
-        // 避免碰撞
-        while (checkCollision(baseX, baseY)) {
-          baseY += SIB_GAP;
-        }
-
-        pos.set(id, { x: baseX, y: baseY });
-        globalYRanges.push({ minY: baseY, maxY: baseY + h, minX: baseX, maxX: baseX + w });
+      // 碰撞微调：先沿 Y 轴下移，再必要时少量右移
+      let attempts = 0;
+      while (checkCollision(baseX, baseY) && attempts < 200) {
+        baseY += Math.floor((RECT_H + SIB_GAP) / 2);
+        attempts++;
       }
+      attempts = 0;
+      while (checkCollision(baseX, baseY) && attempts < 200) {
+        baseX += Math.floor(SIB_GAP / 2);
+        attempts++;
+      }
+
+      pos.set(id, { x: baseX, y: baseY });
+      globalYRanges.push({ minY: baseY, maxY: baseY + h, minX: baseX, maxX: baseX + w });
     }
   }
 
   return pos;
 }
 
-export function useGraphData() {
+export function useGraphData(overrideDirection?: Direction) {
   const [nodes, setNodes] = useState<Node[]>([]);
   const [edges, setEdges] = useState<Edge[]>([]);
   const lastRawRef = useRef<string>('');
@@ -246,6 +232,9 @@ export function useGraphData() {
           isInitialLoad.current = false;
           lastRawRef.current = text;
           const graph: GraphData = mode === 'json' ? parsePlanJsonToGraph(text) : parseMermaidToGraph(text);
+          if (overrideDirection) {
+            graph.direction = overrideDirection;
+          }
 
           console.log('📊 Parsed graph:', {
             nodeCount: graph.nodes.length,

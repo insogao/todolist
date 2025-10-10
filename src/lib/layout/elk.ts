@@ -48,6 +48,10 @@ export async function layoutWithElk(
     layoutOptions: {
       'elk.algorithm': 'layered',
       'elk.direction': elkDirection(graph.direction),
+      // 固定同层对齐为左/上，避免末端节点被置中
+      'elk.layered.nodePlacement.bk.fixedAlignment': 'LEFTUP',
+      // 尽量拉直边，减少回拉导致的居中错觉
+      'elk.layered.nodePlacement.bk.edgeStraightening': 'true',
       // 增加节点间距以避免重叠
       'elk.spacing.nodeNode': '80',
       'elk.layered.spacing.nodeNodeBetweenLayers': '120',

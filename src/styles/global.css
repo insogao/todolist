@@ -175,9 +175,41 @@ body {
   flex-shrink: 0;
 }
 
+/* 区分节点类型的颜色：start（用户问题）/ summary（汇总）/ end（结束） */
+.node-card--start .status-indicator {
+  background: var(--gradient-success);
+}
+.node-card--start {
+  border-color: #86efac; /* 轻微绿色描边 */
+  background: #f0fdf4;   /* 更浅的背景，突出起始节点 */
+}
+.node-card--summary .status-indicator {
+  background: var(--accent);
+}
+.node-card--end .status-indicator {
+  background: var(--danger);
+}
+
 .node-card .content {
   flex: 1;
   min-width: 0;
+}
+
+/* 运行中卡片：添加轻微的底色脉动与进度感 */
+.node-card--running {
+  background: linear-gradient(90deg, rgba(59,130,246,0.05), rgba(59,130,246,0.03));
+}
+
+.loading-dots::after {
+  content: ' ';
+  animation: ellipsis 1.2s infinite;
+}
+
+@keyframes ellipsis {
+  0% { content: ''; }
+  33% { content: '.'; }
+  66% { content: '..'; }
+  100% { content: '...'; }
 }
 
 .node-card .title {

@@ -27,6 +27,9 @@ function workflowPlugin(): Plugin {
           try {
             const data = body ? JSON.parse(body) : {};
             const query = String(data?.query || '').trim();
+            const preset = String(data?.roundsPreset || '').toLowerCase();
+            const presetMap: Record<string, string> = { low: '3', mid: '5', high: '8' };
+            const maxRoundsEnv = presetMap[preset] || process.env.WORKFLOW_MAX_ROUNDS;
             if (!query) {
               res.statusCode = 400;
               res.setHeader('Content-Type', 'application/json');
@@ -42,7 +45,7 @@ function workflowPlugin(): Plugin {
             child = spawn('npm', ['run', 'workflow', '--', '--query', query, '--out', 'runs/plan_live.json'], {
               cwd: agentCwd,
               stdio: 'inherit',
-              env: { ...process.env },
+              env: { ...process.env, ...(maxRoundsEnv ? { WORKFLOW_MAX_ROUNDS: maxRoundsEnv } : {}) },
             });
             child.on('close', () => { child = null; });
             child.on('error', () => { child = null; });
